@@ -1,7 +1,13 @@
 <policies>
     <inbound>
         <base />
-        <!-- Track session for monitoring -->
+        <!-- 
+            Track session for monitoring 
+        
+            * Parse the incoming cookie header for SessionBackend=<value>
+            * Extract the session ID if it exists and store in sessionCookie variable
+            * Return empty string if no session cookie is found
+        -->
         <set-variable name="sessionCookie" value="@{
             string cookieHeader = context.Request.Headers.GetValueOrDefault("Cookie", "");
             if (cookieHeader.Contains("SessionBackend="))
@@ -18,10 +24,22 @@
             }
             return "";
         }" />
-        <!-- Always use the pool (it has built-in load balancing) -->
+
+        <!-- 
+            Always use the pool (it has built-in load balancing) 
+
+            * Pool likely contains multiple Azure OpenAI instances across regions
+            * Built-in load balancing distributes requests across pool members
+        -->
         <set-backend-service backend-id="openai-backend-pool" />
 
-        <!--  Authentication -->
+        <!--          
+            Authentication 
+            
+            * Remove incoming api-key header
+            * Use Azure Managed Identity to authenticate with Cognitive Services
+            * Rewrite URI to the OpenAI chat completions endpoint
+        -->
         <set-header name="api-key" exists-action="delete" />
         <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
         <rewrite-uri template="/v1/chat/completions" />
@@ -33,7 +51,17 @@
     <outbound>
         <base />
 
-        <!-- Set session cookie for new sessions -->
+        <!-- 
+            Set session cookie for new sessions 
+        
+            * If not session cookie found, create a new one
+            * Generate a session ID using the timestamp + requestID for uniqueness
+            * Set Set-Cookie header with security flags:
+                - HttpOnly: prevents JavaScript access
+                - SameSite=Strict: CSRF protection
+                - Max-Age=3600: 1 hour expiration
+                - Path=/: applies to all paths
+        -->
         <choose>
             <when condition="@(string.IsNullOrEmpty((string)context.Variables["sessionCookie"]))">
                 <!-- Use a generic session ID based on request/response -->
@@ -49,7 +77,13 @@
             </when>
         </choose>
         
-        <!-- Debug headers -->
+        <!--         
+            Debug headers for troubleshooting
+
+            * Current session identifier
+            * Which pool handled the request
+            * APIM internal request ID
+        -->
         <set-header name="X-Session-Id" exists-action="override">
             <value>@((string)context.Variables.GetValueOrDefault("sessionId", (string)context.Variables["sessionCookie"]))</value>
         </set-header>
