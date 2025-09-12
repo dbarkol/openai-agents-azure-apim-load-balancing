@@ -11,11 +11,17 @@ load_dotenv()
 # Remove for production - shows what cookies are being sent and received
 class CookieLoggingTransport(httpx.AsyncHTTPTransport):
     async def handle_async_request(self, request):
-        print(f"🍪 Request cookies: {request.headers.get('cookie', 'None')}")
+        print(f"Request cookies: {request.headers.get('cookie', 'None')}")
         response = await super().handle_async_request(request)
         set_cookie = response.headers.get('set-cookie')
         if set_cookie:
-            print(f"🍪 Response set-cookie: {set_cookie}")
+            print(f"Response set-cookie: {set_cookie}")
+
+        backend_pool = response.headers.get('x-backend-pool')
+        session_id = response.headers.get('x-session-id')
+        request_id = response.headers.get('x-request-id')
+        print(f"Backend: {backend_pool}, Session: {session_id}, Request: {request_id}")      
+
         return response
 
 # Enable detailed HTTP logging
