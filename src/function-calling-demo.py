@@ -40,45 +40,47 @@ def get_current_info() -> str:
 
 async def function_call_test():
 
-    azure_base_url=os.getenv("AZURE_OPENAI_ENDPOINT") 
-    azure_api_key=os.getenv("AZURE_OPENAI_API_KEY") 
+    azure_base_url = os.getenv("AZURE_OPENAI_ENDPOINT")
+    azure_api_key = os.getenv("AZURE_OPENAI_API_KEY")
 
-    # Create HTTP client with cookie jar and logging
-    # Essential for session affinity - automatically stores and sends cookies
-    # Required for multi-turn conversations
-    # Remote 'transport' for production
-    http_client = httpx.AsyncClient(
+    deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini")
+
+    # Use async context manager so httpx closes connections cleanly.
+    async with httpx.AsyncClient(
         transport=CookieLoggingTransport(),
         cookies=httpx.Cookies()  # Enable cookie jar
-    )
+    ) as http_client:
 
-    client = AsyncOpenAI(
-        api_key="",
-        base_url=azure_base_url,
-        default_headers={"api-key": azure_api_key},
-        http_client=http_client
-    )
+        client = AsyncOpenAI(
+            api_key=azure_api_key,
+            base_url=azure_base_url,
+            default_headers={"api-key": azure_api_key},
+            http_client=http_client
+        )
 
-    deployment = "gpt-4o-mini"
+        try:
+            agent = Agent(
+                name="ToolsAgent",
+                instructions="Reply succintly, break down each step. Always use the provided tools",
+                model=OpenAIChatCompletionsModel(
+                    model=deployment,
+                    openai_client=client
+                ),
+                tools=[add_numbers, get_current_info]
+            )
 
-    agent = Agent(
-        name="ToolsAgent",
-        instructions="Reply succintly, break down each step. Always use the provided tools",
-        model=OpenAIChatCompletionsModel(
-            model=deployment,
-            openai_client=client
-        ),
-        tools=[add_numbers, get_current_info]
-    )
+            result = await Runner.run(
+                agent, "add 2 and 3, and then the result of that to 5. Get the current time"
+            )
 
-    #OpenAIResponsesModel
-    #OpenAIChatCompletionsModel
+            print("Response:") 
+            print(result.final_output)
 
-    result = await Runner.run(
-        agent, "add 2 and 3, and then the result of that to 5. Get the current time"
-    )
-
-    print("Response:", result.final_output)
+        finally:
+            # If the OpenAI client provides an async close, call it to free resources.
+            close_fn = getattr(client, "aclose", None)
+            if close_fn is not None:
+                await close_fn()
 
 if __name__ == "__main__":
     import asyncio

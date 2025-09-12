@@ -19,7 +19,7 @@ Prerequisites
 - Python 3.10+ recommended.
 - Dependencies: install with `pip install -r requirements.txt`.
 - Azure resources: an Azure OpenAI (or Azure OpenAI-compatible) deployment and an API Management instance if you want APIM in front.
-- Environment variables: at minimum set `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_API_KEY` (see Quickstart).
+- Environment variables: at minimum set `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_API_KEY` (see Quickstart). Optionally set `AZURE_OPENAI_DEPLOYMENT` to choose the deployment (defaults to `gpt-4o-mini`).
 
 Quickstart (local)
 
@@ -38,7 +38,8 @@ AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
 AZURE_OPENAI_API_KEY=your_api_key_here
 ```
 
-1. (Optional) If you use a specific deployment name, update the `deployment` variable in `src/function-calling-demo.py`.
+
+1. (Optional) To select a non-default model deployment, set `AZURE_OPENAI_DEPLOYMENT` in `.env` or the environment.
 
 1. Run the demo:
 
@@ -46,7 +47,12 @@ AZURE_OPENAI_API_KEY=your_api_key_here
 python src/function-calling-demo.py
 ```
 
-This will run a small agent that demonstrates function calling (simple add and current-time tools) using an `AsyncOpenAI` client configured to use a cookie jar for session affinity.
+This will run a small agent that demonstrates function calling (simple add and current-time tools) using an `AsyncOpenAI` client configured to use a cookie jar for session affinity. The demo now:
+
+- creates the `httpx.AsyncClient` inside an `async with` block so connections are closed cleanly;
+- passes `api_key` to the `AsyncOpenAI` client and also sets the Azure `api-key` header via `default_headers` for authentication;
+- selects the model deployment from `AZURE_OPENAI_DEPLOYMENT` (defaults to `gpt-4o-mini`);
+- prints the final response on the line after the `Response:` label (see the demo output).
 
 APIM and `apim/policies.xml`
 
@@ -71,4 +77,3 @@ Useful files
 
 - `src/function-calling-demo.py`: runnable demo showing session-aware HTTP client, function tools, and an Agent/Runner example.
 - `apim/policies.xml`: APIM policy example for cookie/session handling and routing hints.
-
