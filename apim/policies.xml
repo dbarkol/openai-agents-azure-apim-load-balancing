@@ -1,0 +1,66 @@
+<policies>
+    <inbound>
+        <base />
+        <!-- Track session for monitoring -->
+        <set-variable name="sessionCookie" value="@{
+            string cookieHeader = context.Request.Headers.GetValueOrDefault("Cookie", "");
+            if (cookieHeader.Contains("SessionBackend="))
+            {
+                string[] cookies = cookieHeader.Split(';');
+                foreach (string cookie in cookies)
+                {
+                    string trimmed = cookie.Trim();
+                    if (trimmed.StartsWith("SessionBackend="))
+                    {
+                        return trimmed.Substring(15);
+                    }
+                }
+            }
+            return "";
+        }" />
+        <!-- Always use the pool (it has built-in load balancing) -->
+        <set-backend-service backend-id="openai-backend-pool" />
+
+        <!--  Authentication -->
+        <set-header name="api-key" exists-action="delete" />
+        <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+        <rewrite-uri template="/v1/chat/completions" />
+
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+
+        <!-- Set session cookie for new sessions -->
+        <choose>
+            <when condition="@(string.IsNullOrEmpty((string)context.Variables["sessionCookie"]))">
+                <!-- Use a generic session ID based on request/response -->
+                <set-variable name="sessionId" value="@{
+                    // Generate session ID from request timestamp and backend info
+                    string timestamp = DateTime.UtcNow.Ticks.ToString();
+                    string requestId = context.RequestId.ToString();
+                    return "session-" + timestamp.Substring(timestamp.Length - 8) + "-" + requestId.Substring(0, 8);
+                }" />
+                <set-header name="Set-Cookie" exists-action="override">
+                    <value>@("SessionBackend=" + (string)context.Variables["sessionId"] + "; Path=/; HttpOnly; SameSite=Strict; Max-Age=3600")</value>
+                </set-header>
+            </when>
+        </choose>
+        
+        <!-- Debug headers -->
+        <set-header name="X-Session-Id" exists-action="override">
+            <value>@((string)context.Variables.GetValueOrDefault("sessionId", (string)context.Variables["sessionCookie"]))</value>
+        </set-header>
+        <set-header name="X-Backend-Pool" exists-action="override">
+            <value>openai-backend-pool</value>
+        </set-header>
+        <set-header name="X-Request-Id" exists-action="override">
+            <value>@(context.RequestId.ToString())</value>
+        </set-header>
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>
