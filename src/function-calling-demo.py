@@ -11,16 +11,25 @@ load_dotenv()
 # Remove for production - shows what cookies are being sent and received
 class CookieLoggingTransport(httpx.AsyncHTTPTransport):
     async def handle_async_request(self, request):
-        print(f"Request cookies: {request.headers.get('cookie', 'None')}")
+        cookies = request.headers.get('cookie', 'None')
+        print(f"Request cookies: {cookies}")
+        
         response = await super().handle_async_request(request)
-        set_cookie = response.headers.get('set-cookie')
-        if set_cookie:
-            print(f"Response set-cookie: {set_cookie}")
+        
+        # Log all set-cookie headers (both custom and native session affinity)
+        set_cookies = response.headers.get_list('set-cookie')
+        for cookie in set_cookies:
+            print(f"Response set-cookie: {cookie}")
 
-        backend_pool = response.headers.get('x-backend-pool')
-        session_id = response.headers.get('x-session-id')
-        request_id = response.headers.get('x-request-id')
-        print(f"Backend: {backend_pool}, Session: {session_id}, Request: {request_id}")      
+        # Debug headers from APIM policy
+        backend_pool = response.headers.get('x-backend-pool', 'unknown')
+        session_id = response.headers.get('x-session-id', 'none')
+        request_id = response.headers.get('x-request-id', 'none')
+        routing_decision = response.headers.get('x-routing-decision', 'unknown')
+        region = response.headers.get('x-ms-region', 'unknown')
+        
+        print(f"Backend: {backend_pool}, Session: {session_id}, Request: {request_id}")
+        print(f"Region: {region}, Routing: {routing_decision}")
 
         return response
 
@@ -52,9 +61,10 @@ async def function_call_test():
     deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini")
 
     # Use async context manager so httpx closes connections cleanly.
+    # The cookie jar will automatically handle both SessionBackend and APIM-Backend-Affinity cookies
     async with httpx.AsyncClient(
         transport=CookieLoggingTransport(),
-        cookies=httpx.Cookies()  # Enable cookie jar
+        cookies=httpx.Cookies()  # Enable cookie jar for automatic cookie management
     ) as http_client:
 
         client = AsyncOpenAI(
@@ -68,7 +78,7 @@ async def function_call_test():
             agent = Agent(
                 name="ToolsAgent",
                 instructions="Reply succintly, break down each step. Always use the provided tools",
-                model=OpenAIChatCompletionsModel(
+                model=OpenAIResponsesModel(
                     model=deployment,
                     openai_client=client
                 ),
@@ -79,8 +89,12 @@ async def function_call_test():
                 agent, "add 2 and 3, and then the result of that to 5. Get the current time"
             )
 
-            print("Response:") 
+            print("Response:")
             print(result.final_output)
+            
+            print("\n=== Session Affinity Test Complete ===")
+            print("Expected: Both requests should go to the same region/backend")
+            print("If you see different regions, check your APIM policy configuration")
 
         finally:
             # If the OpenAI client provides an async close, call it to free resources.

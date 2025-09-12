@@ -1,0 +1,80 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "apimServiceName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the API Management service"
+            }
+        },
+        "backendPoolId": {
+            "type": "string",
+            "metadata": {
+                "description": "ID of the backend pool to update"
+            }
+        },
+        "backends": {
+            "type": "array",
+            "metadata": {
+                "description": "Array of backend URLs in the pool"
+            },
+            "defaultValue": [
+                {
+                    "url": "https://your-openai-sweden-central.openai.azure.com"
+                },
+                {
+                    "url": "https://your-openai-east-us.openai.azure.com"
+                }
+            ]
+        },
+        "cookieName": {
+            "type": "string",
+            "defaultValue": "APIM-Backend-Affinity",
+            "metadata": {
+                "description": "Name of the cookie used for session affinity"
+            }
+        }
+    },
+    "variables": {
+        "backendPoolName": "[parameters('backendPoolId')]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.ApiManagement/service/backends",
+            "apiVersion": "2023-05-01-preview",
+            "name": "[concat(parameters('apimServiceName'), '/', variables('backendPoolName'))]",
+            "properties": {
+                "description": "OpenAI backend pool with session affinity",
+                "type": "Pool",
+                "pool": {
+                    "services": "[parameters('backends')]",
+                    "sessionAffinity": {
+                        "affinityType": "Cookie",
+                        "cookieName": "[parameters('cookieName')]",
+                        "sessionId": {
+                            "source": "Cookie",
+                            "name": "[parameters('cookieName')]"
+                        }
+                    }
+                },
+                "protocol": "http",
+                "url": "[parameters('backends')[0].url]"
+            }
+        }
+    ],
+    "outputs": {
+        "backendPoolId": {
+            "type": "string",
+            "value": "[variables('backendPoolName')]"
+        },
+        "sessionAffinityEnabled": {
+            "type": "bool",
+            "value": true
+        },
+        "cookieName": {
+            "type": "string",
+            "value": "[parameters('cookieName')]"
+        }
+    }
+}
