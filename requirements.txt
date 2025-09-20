@@ -11,3 +11,7 @@ aiohttp>=3.8.0
 # Development dependencies (optional)
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
+
+
+# Azure dependencies
+azure-ai-inference
